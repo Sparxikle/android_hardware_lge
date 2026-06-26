@@ -21,16 +21,24 @@ namespace android {
 namespace hardware {
 namespace vibrator {
 
-// How many buffer entries needed per ms
-static constexpr double BUFFER_ENTRIES_PER_MS = 8.21;
+// How many buffer entries (samples) needed per ms of playback
+// 60 samples per 5ms update rate = 12 samples per ms (12 kHz sample rate)
+static constexpr double SAMPLES_PER_MS = 12.0;
+
+// Divisor factor for sine wave frequency.
+// For 200 Hz resonant frequency under 12 kHz sample rate:
+// factor = 12000.0 / (2 * pi * 200.0) = 9.5493
+static constexpr double WAVE_FREQUENCY_FACTOR = 9.55;
+
+
 
 // Default amplitude value
 // The vibration is a sine curve, the negative parts are 255 + negative value
 // So, 127 is the maximum before it starts going the other direction
 static constexpr uint8_t DEFAULT_AMPLITUDE = 80;
 
-// Output buffer size (immvibed uses 40 and not size of VIBE_OUTPUT_SAMPLE_SIZE)
-static constexpr int32_t OUTPUT_BUFFER_SIZE = 40;
+// Output buffer size (dw7914 uses 60 and not size of VIBE_OUTPUT_SAMPLE_SIZE on global header)
+static constexpr int32_t OUTPUT_BUFFER_SIZE = 60;
 
 // Click effect in ms
 static constexpr int32_t WAVEFORM_CLICK_EFFECT_MS = 6;
@@ -80,16 +88,29 @@ ndk::ScopedAStatus Vibrator::off() {
 
 ndk::ScopedAStatus Vibrator::on(int32_t timeoutMs,
                                 const std::shared_ptr<IVibratorCallback>& callback) {
-    // Calculate needed buffer entries
-    int32_t bufferSize = (int32_t)round(BUFFER_ENTRIES_PER_MS * timeoutMs);
+    if (timeoutMs <= 0) {
+        return ndk::ScopedAStatus::ok();
+    }
+
+    // Calculate needed buffer entries based on 12 kHz sample rate
+    int32_t bufferSize = (int32_t)round(SAMPLES_PER_MS * timeoutMs);
     u_int8_t fullBuffer[bufferSize];
 
     // turn previous vibrations off
     off();
 
+    // Enable the amplifier for all actuators first to start buffering
+    for (int32_t i = 0; i < mNumActuators; i++) {
+        int32_t ret = ioctl(mFile_desc, TSPDRV_ENABLE_AMP, i);
+        if (ret != 0) {
+            LOG(ERROR) << "Failed to enable Actuator with index " << i;
+            return ndk::ScopedAStatus(AStatus_fromExceptionCode(EX_TRANSACTION_FAILED));
+        }
+    }
+
     for (int32_t i = 0; i < bufferSize; i++) {
         // The vibration is a sine curve, the negative parts are 255 + negative value
-        fullBuffer[i] = (u_int8_t)(mCurrentAmplitude * sin(i / BUFFER_ENTRIES_PER_MS));
+        fullBuffer[i] = (u_int8_t)(mCurrentAmplitude * sin(i / WAVE_FREQUENCY_FACTOR));
     }
 
     // Amount of buffer arrays with size of OUTPUT_BUFFER_SIZE
@@ -115,14 +136,6 @@ ndk::ScopedAStatus Vibrator::on(int32_t timeoutMs,
             }
             // write the buffer to the device
             write(mFile_desc, output, sizeof(output));
-            if ((j + 1) % 4 == 0) {
-                // every 4 buffers, but not the first if theres only 1, we send an ENABLE_AMP signal
-                int32_t ret = ioctl(mFile_desc, TSPDRV_ENABLE_AMP, i);
-                if (ret != 0) {
-                    LOG(ERROR) << "Failed to activate Actuator with index " << i;
-                    return ndk::ScopedAStatus(AStatus_fromExceptionCode(EX_TRANSACTION_FAILED));
-                }
-            }
         }
     }
 

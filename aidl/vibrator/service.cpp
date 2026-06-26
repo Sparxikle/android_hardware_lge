@@ -30,8 +30,8 @@ int registerVibratorService(std::vector<int>& initializeArgs) {
     device_parameter dev_param2{0, VIBE_KP_CFG_FREQUENCY_PARAM2, 0};
     device_parameter dev_param3{0, VIBE_KP_CFG_FREQUENCY_PARAM3, 0};
     device_parameter dev_param4{0, VIBE_KP_CFG_FREQUENCY_PARAM4, 400};
-    device_parameter dev_param5{0, VIBE_KP_CFG_FREQUENCY_PARAM5, 13435};
-    device_parameter dev_param6{0, VIBE_KP_CFG_FREQUENCY_PARAM6, 0};
+    device_parameter dev_param5{0, VIBE_KP_CFG_FREQUENCY_PARAM5, 11141};
+    device_parameter dev_param6{0, VIBE_KP_CFG_FREQUENCY_PARAM6, 48133};
     device_parameter dev_param_update_rate{0, VIBE_KP_CFG_UPDATE_RATE_MS, 5};
 
     // Set magic number for vibration driver, wont allow us to write data without!
